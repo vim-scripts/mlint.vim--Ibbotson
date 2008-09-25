@@ -1,0 +1,10 @@
+This is a mirror of http://www.vim.org/scripts/script.php?script_id=2378
+
+This is a filetype plugin for Matlab .m files. It runs Matlab's mlint function at appropriate times, parses the output and highlights the code in a similar fashion to the Matlab editor.
+
+The script maps <LocalLeader>l to its RunLint() function, so you can run the mlint tool at other times other than the automatic ones.
+
+Also <LocalLeader>m gives the messages from mlint on the status line for the line that the cursor is on.
+
+On windows the automatic updating can get quite annoying because it pops up a command window everytime it runs mlint, even if only briefly. I would like to call mlint using "start /b mlint" which should prevent this, however there is a bug in Vim which stops me being able to do this. So as a workaround you can optionally disable running mlint on hover by putting this line in your .vimrc:
+let mlint_hover = 0
