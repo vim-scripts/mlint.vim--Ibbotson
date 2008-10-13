@@ -70,7 +70,9 @@ if exists('b:undo_ftplugin')
 else
     let b:undo_ftplugin = ""
 endif
-let b:undo_ftplugin = b:undo_ftplugin.'call <SNR>'.s:SID().'_Cleanup()'
+let b:undo_ftplugin = b:undo_ftplugin.'call <SNR>'.s:SID().'_Cleanup('.
+            \ '"'.expand("<afile>:t").'", "'.
+            \ getbufvar(expand("<afile>"), "mlintTempDir").'")'
 
 " determine 'rmdir' command to use (use 'g:mlint_rmdir_cmd' if it exists or
 " default to the one used by netrw if it exists, or just 'rmdir' if it doesn't)
@@ -84,7 +86,6 @@ endif
 
 "Create a temporary directory
 let b:mlintTempDir = tempname() . "/"
-call mkdir(b:mlintTempDir)
 
 if !exists("*s:RunLint")
     function s:RunLint()
@@ -96,6 +97,10 @@ if !exists("*s:RunLint")
             endif
         else
             let b:cleared = 1
+        endif
+        "If the temporary directory doesn't exist then create it
+        if !isdirectory(b:mlintTempDir)
+            call mkdir(b:mlintTempDir)
         endif
         "Get the filename
         let s:filename = expand("%:t")
@@ -115,11 +120,13 @@ if !exists("*s:RunLint")
                 if s:colEnd > 0
                     let s:colStart = s:colStart -1
                     let s:colEnd = s:colEnd + 1
-                    let s:mID = matchadd('MLint', '\%'.s:lineNum.'l'.'\%>'.s:colStart.'c'.'\%<'.s:colEnd.'c')
+                    let s:mID = matchadd('MLint', '\%'.s:lineNum.'l'.'\%>'.
+                                \ s:colStart.'c'.'\%<'.s:colEnd.'c')
                 else
                     let s:colEnd = s:colStart + 1
                     let s:colStart = s:colStart - 1
-                    let s:mID = matchadd('MLint', '\%'.s:lineNum.'l'.'\%>'.s:colStart.'c'.'\%<'.s:colEnd.'c')
+                    let s:mID = matchadd('MLint', '\%'.s:lineNum.'l'.'\%>'.
+                                \ s:colStart.'c'.'\%<'.s:colEnd.'c')
                 endif
             else
                 let s:mID = matchadd('MLint', '\%'.s:lineNum.'l','\%>1c')
@@ -144,7 +151,9 @@ if !exists("*s:GetLintMessage")
     function s:GetLintMessage()
         let s:cursorPos = getpos(".")
         for s:lintMatch in b:matched
-            if s:lintMatch['lineNum'] == s:cursorPos[1] "&& s:cursorPos[2] > s:lintMatch['colStart'] && s:cursorPos[2] < s:lintMatch['colEnd']
+            if s:lintMatch['lineNum'] == s:cursorPos[1] 
+                "\ && s:cursorPos[2] > s:lintMatch['colStart'] 
+                "\ && s:cursorPos[2] < s:lintMatch['colEnd']
                 echo s:lintMatch['message']
             endif
         endfor
@@ -181,23 +190,27 @@ if !exists('*s:Cleanup')
         if !exists('s:lastMlintCleanup') || s:lastMlintCleanup != l:mlintTempDir.a:filename
             let s:lastMlintCleanup = l:mlintTempDir.a:filename
 
-            if filewritable(fnameescape(l:mlintTempDir.a:filename)) == 1
-                if delete(fnameescape(l:mlintTempDir.a:filename)) == 0
-                    " TODO: find a way to detect success and output a warning on failure
-                    exe "silent! !".g:mlint_rmdir_cmd." ".fnameescape(l:mlintTempDir)
+            "If the buffer is opened but RunLint() doesn't get called, the
+            "temp dir is not created, so check for its existence first.
+            if isdirectory(l:mlintTempDir)
+                if filewritable(fnameescape(l:mlintTempDir.a:filename)) == 1
+                    if delete(fnameescape(l:mlintTempDir.a:filename)) == 0
+                        " TODO: find a way to detect success and output a warning on failure
+                        exe "silent! !".g:mlint_rmdir_cmd." ".fnameescape(l:mlintTempDir)
+                    else
+                        echohl WarningMsg
+                        echomsg "mlint: could not delete temp file ".
+                                    \ fnameescape(l:mlintTempDir.a:filename).
+                                    \ "; error during file deletion"
+                        echohl None
+                    endif
                 else
                     echohl WarningMsg
                     echomsg "mlint: could not delete temp file ".
                                 \ fnameescape(l:mlintTempDir.a:filename).
-                                \ "; error during file deletion"
+                                \ "; no write privileges"
                     echohl None
                 endif
-            else
-                echohl WarningMsg
-                echomsg "mlint: could not delete temp file ".
-                            \ fnameescape(l:mlintTempDir.a:filename).
-                            \ "; no write privileges"
-                echohl None
             endif
         endif
     endfunction
