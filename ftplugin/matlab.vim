@@ -19,12 +19,30 @@
 "    You should have received a copy of the GNU General Public License
 "    along with this program.  If not, see <http://www.gnu.org/licenses/>.
 "
-" Version: 0.2
+" Version: 0.3
+"
+" The following variables affect this plugin:
+"
+"   g:mlint_rmdir_cmd: set this variable to the command on your system that will
+"                      delete a directory. Defaults to the same command used by
+"                      netrw, if you have it. If not, defaults to "rmdir"
+"
+"   g:mlint_path_to_mlint: set this variable to the full path to the mlint
+"                          executable, if it is not found in your system path.
+"
+"   g:mlint_hover: set this variable to prevent mlint from automatically
+"                  updating on CursorHold events. This may be especially useful
+"                  if you do not have Vim 7.2.25 or later, since a bug exists in
+"                  earlier versions of Vim that causes CursorHold to continually
+"                  fire for this plugin.
+"
 
 if exists("b:did_mlint_plugin")
     finish
 endif
-let b:did_mlint_plugin = 2
+" This variable can be anything as long as it exists.
+" We may as well set it to something useful (like the version number)
+let b:did_mlint_plugin = 3
 
 " This plugin uses line continuation...save cpo to restore it later
 let s:cpo_sav = &cpo
@@ -84,6 +102,11 @@ if !exists('g:mlint_rmdir_cmd')
   endif
 endif
 
+" default the mlint path to assume mlint is in the path or use supplied value
+if !exists('g:mlint_path_to_mlint')
+    let g:mlint_path_to_mlint="mlint"
+endif
+
 "Create a temporary directory
 let b:mlintTempDir = tempname() . "/"
 
@@ -104,9 +127,24 @@ if !exists("*s:RunLint")
         endif
         "Get the filename
         let s:filename = expand("%:t")
-        exe "silent write! " . b:mlintTempDir . s:filename
-        "MatLab's mlint executable must be on the path for this to work
-        let s:lint = system("mlint " . b:mlintTempDir . s:filename)
+        exe "silent write! " . fnameescape(b:mlintTempDir . s:filename)
+
+        " Windows defaults for shellxquote are bad curretly.
+        " See http://groups.google.com/group/vim_dev/browse_thread/thread/3d1cc6cb0c0d27b3
+        if has('win32') || has('win16') || has('win64')
+            let shxq_sav=&shellxquote
+            let shcf_sav=&shellcmdflag
+            set shellxquote=\"
+            set shellcmdflag=/s\ /c
+        endif
+
+        let s:lint = system(shellescape(g:mlint_path_to_mlint) . " " . shellescape(b:mlintTempDir . s:filename))
+
+        if has('win32') || has('win16') || has('win64')
+            let &shellxquote=shxq_sav
+            let &shellcmdflag=shcf_sav
+        endif
+
         "Split the output from mlint and loop over each message
         let s:lint_lines = split(s:lint, '\n')
         highlight MLint term=underline gui=undercurl guisp=Orange
@@ -116,7 +154,17 @@ if !exists("*s:RunLint")
             let s:lineNum = matchstr(s:line, 'L \zs[0-9]\+')
             let s:colStart = matchstr(s:line, 'C \zs[0-9]\+')
             let s:colEnd = matchstr(s:line, 'C [0-9]\+-\zs[0-9]\+')
-            if s:colStart > 0
+            let s:message = matchstr(s:line, ': \zs.*')
+            if s:lineNum > line("$")
+                let s:mID = matchadd('MLint', '\%'.line("$").'l', '\%>1c')
+                let s:lineNum = s:lineNum - 1
+            elseif s:lineNum == 0
+            " If mlint gave a message about line 0 display it immediately.
+                echohl WarningMsg
+                echo s:message
+                echohl None
+                let s:mID = 0
+            elseif s:colStart > 0
                 if s:colEnd > 0
                     let s:colStart = s:colStart -1
                     let s:colEnd = s:colEnd + 1
@@ -131,11 +179,6 @@ if !exists("*s:RunLint")
             else
                 let s:mID = matchadd('MLint', '\%'.s:lineNum.'l','\%>1c')
             endif
-            if s:lineNum > line("$")
-                let s:mID = matchadd('MLint', '\%'.line("$").'l', '\%>1c')
-                let s:lineNum = s:lineNum - 1
-            endif
-            let s:message = matchstr(s:line, ': \zs.*')
             let s:matchDict['mID'] = s:mID
             let s:matchDict['lineNum'] = s:lineNum
             let s:matchDict['colStart'] = s:colStart
@@ -151,10 +194,18 @@ if !exists("*s:GetLintMessage")
     function s:GetLintMessage()
         let s:cursorPos = getpos(".")
         for s:lintMatch in b:matched
-            if s:lintMatch['lineNum'] == s:cursorPos[1] 
+        " If we're on a line with a match then show the mlint message
+            if s:lintMatch['lineNum'] == s:cursorPos[1]
+                " The two lines commented below cause a message to be shown
+                " only when the cursor is actually over the offending item in
+                " the line.
                 "\ && s:cursorPos[2] > s:lintMatch['colStart'] 
                 "\ && s:cursorPos[2] < s:lintMatch['colEnd']
                 echo s:lintMatch['message']
+            elseif s:lintMatch['lineNum'] == 0
+                echohl WarningMsg
+                echo s:lintMatch['message']
+                echohl None   
             endif
         endfor
     endfunction
@@ -185,18 +236,24 @@ if !exists('*s:Cleanup')
             let l:mlintTempDir = substitute(l:mlintTempDir,'/','\','g')
         endif
 
-        " For some reason, this function gets called multiple times for one
-        " buffer sometimes. Check to prevent this.
+        " For some reason, this function sometimes gets called multiple times
+        " for one buffer. Check to prevent this.
         if !exists('s:lastMlintCleanup') || s:lastMlintCleanup != l:mlintTempDir.a:filename
             let s:lastMlintCleanup = l:mlintTempDir.a:filename
 
             "If the buffer is opened but RunLint() doesn't get called, the
             "temp dir is not created, so check for its existence first.
             if isdirectory(l:mlintTempDir)
-                if filewritable(fnameescape(l:mlintTempDir.a:filename)) == 1
-                    if delete(fnameescape(l:mlintTempDir.a:filename)) == 0
-                        " TODO: find a way to detect success and output a warning on failure
+                if filewritable(l:mlintTempDir.a:filename) == 1
+                    if delete(l:mlintTempDir.a:filename) == 0
                         exe "silent! !".g:mlint_rmdir_cmd." ".fnameescape(l:mlintTempDir)
+                        if isdirectory(l:mlintTempDir)
+                            echohl WarningMsg
+                            echomsg "mlint: could not delete temp directory ".
+                                        \ fnameescape(l:mlintTempDir).
+                                        \ "; directory still exists after deletion"
+                            echohl None
+                        endif
                     else
                         echohl WarningMsg
                         echomsg "mlint: could not delete temp file ".
