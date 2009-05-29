@@ -136,10 +136,15 @@ if !exists("*s:RunLint")
             let shcf_sav=&shellcmdflag
             set shellxquote=\"
             set shellcmdflag=/s\ /c
+            "echo 'Here'
         endif
+        "echo has('win32')
+        "echo &shellquote
+        let s:mlintCommand = shellescape(g:mlint_path_to_mlint). " " . shellescape(b:mlintTempDir . s:filename)
+        let s:lint = system(s:mlintCommand)
 
-        let s:lint = system(shellescape(g:mlint_path_to_mlint) . " " . shellescape(b:mlintTempDir . s:filename))
-
+        "echo s:mlintCommand
+        "echo s:lint
         if has('win32') || has('win16') || has('win64')
             let &shellxquote=shxq_sav
             let &shellcmdflag=shcf_sav
@@ -246,6 +251,11 @@ if !exists('*s:Cleanup')
             if isdirectory(l:mlintTempDir)
                 if filewritable(l:mlintTempDir.a:filename) == 1
                     if delete(l:mlintTempDir.a:filename) == 0
+                        " Vim leaves a filename.m~ file in the temp
+                        " directory, so remove it here.
+                        " TODO: Rather than deleting it we probably want to
+                        " prevent it being created in the first place.
+                        call delete(l:mlintTempDir.a:filename.'~')
                         exe "silent! !".g:mlint_rmdir_cmd." ".fnameescape(l:mlintTempDir)
                         if isdirectory(l:mlintTempDir)
                             echohl WarningMsg
