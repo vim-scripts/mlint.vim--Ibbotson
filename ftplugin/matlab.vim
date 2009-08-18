@@ -3,9 +3,9 @@
 "
 " Place in your after/ftplugin directory.
 "
-" Last Change: 2008 Oct 13
+" Last Change: 2009 July 11
 " Maintainer: Thomas Ibbotson <thomas.ibbotson@gmail.com>
-" License: Copyright 2008 Thomas Ibbotson
+" License: Copyright 2008-2009 Thomas Ibbotson
 "    This program is free software: you can redistribute it and/or modify
 "    it under the terms of the GNU General Public License as published by
 "    the Free Software Foundation, either version 3 of the License, or
@@ -19,7 +19,7 @@
 "    You should have received a copy of the GNU General Public License
 "    along with this program.  If not, see <http://www.gnu.org/licenses/>.
 "
-" Version: 0.3
+" Version: 0.4
 "
 " The following variables affect this plugin:
 "
@@ -42,7 +42,7 @@ if exists("b:did_mlint_plugin")
 endif
 " This variable can be anything as long as it exists.
 " We may as well set it to something useful (like the version number)
-let b:did_mlint_plugin = 3
+let b:did_mlint_plugin = 4
 
 " This plugin uses line continuation...save cpo to restore it later
 let s:cpo_sav = &cpo
@@ -72,9 +72,9 @@ au InsertLeave <buffer> call s:RunLint()
 au BufUnload <buffer> call s:Cleanup(expand("<afile>:t"), getbufvar(expand("<afile>"), "mlintTempDir"))
 
 if !exists("mlint_hover")
-    au CursorHold <buffer> call s:RunLint()
+    au CursorHold <buffer> if s:BufChanged() | call s:RunLint() | endif
     au CursorHold <buffer> call s:GetLintMessage()
-    au CursorHoldI <buffer> call s:RunLint()
+    au CursorHoldI <buffer> if s:BufChanged() | call s:RunLint() | endif
 endif
 
 if !exists('*s:SID')
@@ -110,8 +110,25 @@ endif
 "Create a temporary directory
 let b:mlintTempDir = tempname() . "/"
 
+if !exists("*s:BufChanged")
+    function s:BufChanged()
+        if !exists("b:mlint_oldchangedtick")
+            let b:mlint_oldchangedtick = b:changedtick
+            return 1
+        else
+            let l:oct = b:mlint_oldchangedtick
+            let b:mlint_oldchangedtick = b:changedtick
+            return l:oct != b:changedtick
+        endif
+    endfunction
+endif
+
 if !exists("*s:RunLint")
     function s:RunLint()
+        " update tracking of changedtick to not trigger an automatic re-run
+        " until necessary
+        let b:mlint_oldchangedtick = b:changedtick
+
         "Clear previous matches
         if exists("b:cleared")
             if b:cleared == 0
@@ -136,15 +153,11 @@ if !exists("*s:RunLint")
             let shcf_sav=&shellcmdflag
             set shellxquote=\"
             set shellcmdflag=/s\ /c
-            "echo 'Here'
         endif
-        "echo has('win32')
-        "echo &shellquote
+
         let s:mlintCommand = shellescape(g:mlint_path_to_mlint). " " . shellescape(b:mlintTempDir . s:filename)
         let s:lint = system(s:mlintCommand)
 
-        "echo s:mlintCommand
-        "echo s:lint
         if has('win32') || has('win16') || has('win64')
             let &shellxquote=shxq_sav
             let &shellcmdflag=shcf_sav
@@ -204,13 +217,13 @@ if !exists("*s:GetLintMessage")
                 " The two lines commented below cause a message to be shown
                 " only when the cursor is actually over the offending item in
                 " the line.
-                "\ && s:cursorPos[2] > s:lintMatch['colStart'] 
+                "\ && s:cursorPos[2] > s:lintMatch['colStart']
                 "\ && s:cursorPos[2] < s:lintMatch['colEnd']
                 echo s:lintMatch['message']
             elseif s:lintMatch['lineNum'] == 0
                 echohl WarningMsg
                 echo s:lintMatch['message']
-                echohl None   
+                echohl None
             endif
         endfor
     endfunction
@@ -251,8 +264,8 @@ if !exists('*s:Cleanup')
             if isdirectory(l:mlintTempDir)
                 if filewritable(l:mlintTempDir.a:filename) == 1
                     if delete(l:mlintTempDir.a:filename) == 0
-                        " Vim leaves a filename.m~ file in the temp
-                        " directory, so remove it here.
+                        " Vim leaves a filename.m~ file in the temp directory,
+                        " so remove it here.
                         " TODO: Rather than deleting it we probably want to
                         " prevent it being created in the first place.
                         call delete(l:mlintTempDir.a:filename.'~')
