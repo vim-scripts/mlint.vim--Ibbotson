@@ -19,7 +19,7 @@
 "    You should have received a copy of the GNU General Public License
 "    along with this program.  If not, see <http://www.gnu.org/licenses/>.
 "
-" Version: 0.4
+" Version: 0.6
 "
 " The following variables affect this plugin:
 "
@@ -42,7 +42,7 @@ if exists("b:did_mlint_plugin")
 endif
 " This variable can be anything as long as it exists.
 " We may as well set it to something useful (like the version number)
-let b:did_mlint_plugin = 4
+let b:did_mlint_plugin = 6
 
 " This plugin uses line continuation...save cpo to restore it later
 let s:cpo_sav = &cpo
@@ -56,6 +56,10 @@ if !hasmapto('<Plug>mlintGetLintMessage')
     map <buffer> <unique> <LocalLeader>m <Plug>mlintGetLintMessage
 endif
 
+if !hasmapto('<Plug>mlintOutline')
+    map <buffer> <unique> <LocalLeader>o <Plug>mlintOutline
+endif
+
 if !hasmapto('<SID>RunLint')
     noremap <unique> <script> <Plug>mlintRunLint <SID>RunLint
     noremap <SID>RunLint :call <SID>RunLint()<CR>
@@ -64,6 +68,11 @@ endif
 if !hasmapto('<SID>GetLintMessage')
     noremap <unique> <script> <Plug>mlintGetLintMessage <SID>GetLintMessage
     noremap <SID>GetLintMessage :call <SID>GetLintMessage()<CR>
+end
+
+if !hasmapto('<SID>Outline')
+    noremap <unique> <script> <Plug>mlintOutline <SID>Outline
+    noremap <SID>Outline :call <SID>Outline()<CR>
 end
 
 au BufWinLeave <buffer> call s:ClearLint()
@@ -233,6 +242,27 @@ if !exists("*s:GetLintMessage")
         endfor
     endfunction
 endif
+
+if !exists("*s:Outline")
+    function s:Outline()
+        silent call s:RunLint()
+        bot split __OUTLINE__
+        exec '15 wincmd _'
+
+        setlocal modifiable
+        setlocal noswapfile
+        setlocal buftype=nowrite
+        setlocal bufhidden=delete
+
+        % d _
+        0put!=s:lint_lines
+
+        0
+
+        setlocal nomodifiable
+        setlocal nomodified
+    endfunction
+end
 
 if !exists('*s:ClearLint')
     function s:ClearLint()
