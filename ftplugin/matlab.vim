@@ -3,9 +3,9 @@
 "
 " Place in your after/ftplugin directory.
 "
-" Last Change: 2009 July 11
+" Last Change: 2011 Oct 21
 " Maintainer: Thomas Ibbotson <thomas.ibbotson@gmail.com>
-" License: Copyright 2008-2009 Thomas Ibbotson
+" License: Copyright 2008-2009, 2011 Thomas Ibbotson
 "    This program is free software: you can redistribute it and/or modify
 "    it under the terms of the GNU General Public License as published by
 "    the Free Software Foundation, either version 3 of the License, or
@@ -151,8 +151,12 @@ if !exists("*s:RunLint")
         if has('win32') || has('win16') || has('win64')
             let shxq_sav=&shellxquote
             let shcf_sav=&shellcmdflag
-            set shellxquote=\"
-            set shellcmdflag=/s\ /c
+            let shsl_sav=&shellslash
+            if &shell =~ 'cmd.exe'
+                set noshellslash
+                set shellxquote=\"
+                set shellcmdflag=/s\ /c
+            endif
         endif
 
         let s:mlintCommand = shellescape(g:mlint_path_to_mlint). " " . shellescape(b:mlintTempDir . s:filename)
@@ -161,6 +165,7 @@ if !exists("*s:RunLint")
         if has('win32') || has('win16') || has('win64')
             let &shellxquote=shxq_sav
             let &shellcmdflag=shcf_sav
+            let &shellslash=shsl_sav
         endif
 
         "Split the output from mlint and loop over each message
