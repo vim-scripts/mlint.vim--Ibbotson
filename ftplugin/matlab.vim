@@ -19,7 +19,7 @@
 "    You should have received a copy of the GNU General Public License
 "    along with this program.  If not, see <http://www.gnu.org/licenses/>.
 "
-" Version: 0.6
+" Version: 0.6.1
 "
 " The following variables affect this plugin:
 "
@@ -211,11 +211,15 @@ if !exists("*s:RunLint")
             else
                 let s:mID = matchadd('MLint', '\%'.s:lineNum.'l','\%>1c')
             endif
+            " Define the current buffer number for the quickfix list
+            let s:matchDict['bufnr'] = bufnr('')
             let s:matchDict['mID'] = s:mID
-            let s:matchDict['lineNum'] = s:lineNum
+            let s:matchDict['lnum'] = s:lineNum
+            " Column number for quickfix list
+            let s:matchDict['col'] = s:colStart
             let s:matchDict['colStart'] = s:colStart
             let s:matchDict['colEnd'] = s:colEnd
-            let s:matchDict['message'] = s:message
+            let s:matchDict['text'] = s:message
             call add(b:matched, s:matchDict)
         endfor
         let b:cleared = 0
@@ -227,16 +231,16 @@ if !exists("*s:GetLintMessage")
         let s:cursorPos = getpos(".")
         for s:lintMatch in b:matched
         " If we're on a line with a match then show the mlint message
-            if s:lintMatch['lineNum'] == s:cursorPos[1]
+            if s:lintMatch['lnum'] == s:cursorPos[1]
                 " The two lines commented below cause a message to be shown
                 " only when the cursor is actually over the offending item in
                 " the line.
                 "\ && s:cursorPos[2] > s:lintMatch['colStart']
                 "\ && s:cursorPos[2] < s:lintMatch['colEnd']
-                echo s:lintMatch['message']
-            elseif s:lintMatch['lineNum'] == 0
+                echo s:lintMatch['text']
+            elseif s:lintMatch['lnum'] == 0
                 echohl WarningMsg
-                echo s:lintMatch['message']
+                echo s:lintMatch['text']
                 echohl None
             endif
         endfor
@@ -246,21 +250,8 @@ endif
 if !exists("*s:Outline")
     function s:Outline()
         silent call s:RunLint()
-        bot split __OUTLINE__
-        exec '15 wincmd _'
-
-        setlocal modifiable
-        setlocal noswapfile
-        setlocal buftype=nowrite
-        setlocal bufhidden=delete
-
-        % d _
-        0put!=s:lint_lines
-
-        0
-
-        setlocal nomodifiable
-        setlocal nomodified
+        call setqflist(b:matched)
+        cwindow
     endfunction
 end
 
